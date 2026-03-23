@@ -4,118 +4,131 @@ icon: forward-step
 
 # Pagination
 
-### Cursor Pagination
+List endpoints return collections in pages. Currents uses **cursor-based** and **offset-based** pagination for various API endpoints. This page describes both patterns.
 
-Most API resources have **list** API methods. For instance, you can list projects, list runs for a project.&#x20;
+## Cursor-based pagination
 
-Those methods utilize cursor-based pagination via the `starting_after` and `ending_before` parameters. Both parameters take an existing pointer value (see below) and return objects in a particular order.&#x20;
+Use cursor pagination for list methods such as listing projects or runs for a project.
 
-These list API methods share a common structure, taking optional parameters: `limit`, `starting_after`, and `ending_before`.
+### Parameters
+
+Optional query parameters:
+
+| Parameter        | Description                                                                                                           |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `limit`          | Maximum number of items in this page. **1–50**, default **10**.                                                       |
+| `starting_after` | Cursor from a previous item. Returns the next page of items **older** than that item (see [Sort order](#sort-order)). |
+| `ending_before`  | Cursor from a previous item. Returns the next page of items **newer** than that item (see [Sort order](#sort-order)). |
 
 {% hint style="warning" %}
-**Please note:** Listing parameters are mutually exclusive -- only one of `starting_after` or `ending_before` may be used.
+Only one of `starting_after` or `ending_before` may be sent in a single request. They are mutually exclusive.
 {% endhint %}
 
-| Parameter        | Description                                                                                                                  |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `limit`          | Limit the number of returned items. Valid values are **1 to 50**. The default value is **10**.                               |
-| `starting_after` | Pagination cursor - if specified, the response will list items created before the pointed item.                              |
-| `ending_before`  | Pagination cursor - if specified, the response will list items created after the pointed item on reverse chronological order |
+### Response shape
 
-#### List API method responses
+Every list response includes `has_more`. Each item in `data` includes a `cursor` string you pass back as `starting_after` or `ending_before` on the next request.
 
-All "list" API method responses have the `has_more` flag, every item of the requested type has a `cursor` field that can be used for pagination, for example:
+Example: `GET https://api.currents.dev/v1/projects/bAYZ41/runs`
 
-```jsonp
-// GET https://api.currents.dev/v1/projects/bAYZ41/runs
-
+```json
 {
-    "status": "OK",
-    "has_more": true,
-    "data": [
-        {
-            "runId": "9ee42e4b85c02c634fe30b26d728624e",
-            "cursor": "62c538efcbd7fab8a5edb371",
-            // ...
-        }, {
-            "runId": "9af7a261f148d1b45d013eec6a22902e",
-            "cursor": "62baacbf9f4689a83d2b24cb",
-            // ...
-        },
-        // ...
-    ]
+  "status": "OK",
+  "has_more": true,
+  "data": [
+    {
+      "runId": "9ee42e4b85c02c634fe30b26d728624e",
+      "cursor": "62c538efcbd7fab8a5edb371"
+    },
+    {
+      "runId": "9af7a261f148d1b45d013eec6a22902e",
+      "cursor": "62baacbf9f4689a83d2b24cb"
+    }
+  ]
 }
 ```
 
-If `has_more` value is true, you can get additional items from the "list" API, using cursor-based pagination.
+When `has_more` is `true`, request the next page using the appropriate cursor parameter (see below).
 
-#### Using items cursor for pagination
+### Sort order
 
-Currents' list API methods utilize cursor-based pagination via the `starting_after` and `ending_before` parameters. Both parameters take an existing pointer value (see below) and return objects in a particular order.&#x20;
+Picture the full timeline as **newest at the top**, **oldest at the bottom** (like a “latest first” feed):
 
-* if `ending_before` specified - in reverse chronological order
-* if `starting_after` is specified - in chronological order
-* if none specified - in chronological order
-
-The `ending_before` parameter returns items created before the pointed item. The `starting_after` parameter returns items listed after the pointed item.&#x20;
-
-For example, given a chronologically ordered list of items in a DB and using `pointer1003` as a reference:
-
-```
-pointer1006
-pointer1005
-pointer1004
-pointer1003 <
-pointer1002
-pointer1001
-pointer1000
+```text
+… newest …
+cursor_D
+cursor_C
+cursor_B   ← reference cursor
+cursor_A
+… oldest …
 ```
 
-* `starting_after=pointer1003` would return
+| Request                                      | What you get                                                                                                                                                 |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Neither `starting_after` nor `ending_before` | First page, in that endpoint’s default order.                                                                                                                |
+| `starting_after=cursor_B`                    | Items **older than B** (e.g. `cursor_A`, …)—continuing **down** toward the oldest. The API describes this page as **chronological** order.                   |
+| `ending_before=cursor_B`                     | Items **newer than B** (e.g. `cursor_C`, `cursor_D`, …)—continuing **up** toward the newest. The API describes this page as **reverse chronological** order. |
 
-```
-pointer1002
-pointer1001
-pointer1000
-```
+### Example: next page (older items)
 
-* `ending_before=pointer1003` would return (in reverse chronological order)
+After the first request, take the **last** item’s `cursor` in `data` and call again with `starting_after`:
 
-```
-pointer1004
-pointer1005
-pointer1006
+```http
+GET /v1/projects/bAYZ41/runs?limit=20&starting_after=62baacbf9f4689a83d2b24cb
 ```
 
-### Offset Pagination
+Stop when `has_more` is `false` or `data` is empty.
 
-Some API resources don't have a stable cursor, for example - listing spec files for a project is an aggregative query that doesn't have a corresponding stable database entity. We use offset-based pagination for those resources. The resources using offset pagination have an explicit notice.
+### Example: page toward newer items
 
-The responses for such resources have the following shape:
+Use `ending_before` with a cursor from an item **newer** than the slice you want to extend (often the **first** item of the current page when walking back toward the present):
+
+```http
+GET /v1/projects/bAYZ41/runs?limit=20&ending_before=62c538efcbd7fab8a5edb371
+```
+
+## Offset-based pagination
+
+Some list operations (for example, aggregated lists such as **spec files** for a project) do not map to a stable row cursor. Those endpoints document offset pagination explicitly.
+
+### Response shape
 
 ```typescript
 {
-    "status": "OK",
-    "data": {
-        // ... resource-specific data
-        "nextPage": number | false,
-        "total": number
-    }
+  "status": "OK",
+  "data": {
+    // ... resource-specific fields
+    "nextPage": number | false,
+    "total": number
+  }
 }
 ```
 
-* `total` field contains the total number of items retrieved by the query
-* `nextPage` field contains the next page to be used for retrieving additional items. If the value is `false` it means all the items were exhausted and no more pages are available.
+| Field      | Meaning                                                              |
+| ---------- | -------------------------------------------------------------------- |
+| `total`    | Total number of items matching the query (across all pages).         |
+| `nextPage` | Page index to request next, or `false` when there are no more pages. |
 
-To retrieve more items from a paginated response, use the following query parameters:
+### Parameters
 
-| Parameter | Description                                                                                                            |
-| --------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `limit`   | Limit the number of returned items. Valid values are **1 to 50**.                                                      |
-| `page`    | Pagination cursor - if specified, the response will return items from the spec files list based on a splice operation. |
+| Parameter | Description            |
+| --------- | ---------------------- |
+| `limit`   | Page size. **1–50**.   |
+| `page`    | Zero-based page index. |
 
-The offset will be calculated as follows:
+The slice applied server-side is:
 
+```text
+items.slice(page * limit, page * limit + limit)
 ```
-items.splice(page * limit, limit)
+
+(Equivalent to `items.splice(page * limit, limit)` for a copy of the list.)
+
+### Example
+
+First page:
+
+```http
+GET /v1/projects/{projectId}/specs?limit=25&page=0
 ```
+
+If `data.nextPage` is `1`, fetch the next page with `page=1`, same `limit`, until `nextPage` is `false`.
