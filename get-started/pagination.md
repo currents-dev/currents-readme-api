@@ -4,7 +4,7 @@ icon: forward-step
 
 # Pagination
 
-List endpoints return collections in pages. Currents uses **cursor-based** pagination for most resources and **offset-based** pagination for a few aggregations that do not have stable cursors. This page describes both patterns.
+List endpoints return collections in pages. Currents uses **cursor-based** and **offset-based** pagination for various API endpoints. This page describes both patterns.
 
 ## Cursor-based pagination
 
