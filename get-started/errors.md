@@ -19,5 +19,5 @@ Currents uses conventional HTTP response codes to indicate the success or failur
 | 403 - Forbidden                    | The API key doesn't have permissions to perform the request.                                     |
 | 404 - Not Found                    | The requested resource doesn't exist.                                                            |
 | 409 - Conflict                     | The request conflicts with another request                                                       |
-| 429 - Too Many Requests            | Too many requests hit the API too quickly. We recommend an exponential backoff of your requests. |
+| 429 - Too Many Requests            | The API key or organization went over a [rate limit](rate-limits.md). Retry after the number of seconds in the `Retry-After` header. |
 | 500, 502, 503, 504 - Server Errors | <p>Something went wrong on Currents end.<br></p>                                                 |
