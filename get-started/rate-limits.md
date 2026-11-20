@@ -8,13 +8,14 @@ The REST API limits how many requests each API key and each organization can sen
 
 ## Limits
 
-| Endpoints | Per API key | Per organization |
+| Requests | Per API key | Per organization |
 | --- | --- | --- |
-| `GET /v1/test-results/{signature}` | 3,000 per minute | 5,000 per minute |
-| `GET /v1/instances/{instanceId}` | 3,000 per minute | 5,000 per minute |
-| All other endpoints | 1,000 per minute | 2,000 per minute |
+| `GET /v1/test-results/{signature}` | 3,000 per minute | 6,000 per minute |
+| `GET /v1/instances/{instanceId}` | 1,000 per minute | 2,000 per minute |
+| Other `GET` requests | 600 per minute | 1,200 per minute |
+| `POST`, `PUT` and `DELETE` requests | 300 per minute | 600 per minute |
 
-* Each request counts against one row only. Requests to `GET /v1/test-results/{signature}` don't use up the budget of the other endpoints.
+* Each request counts against one row only. Requests to `GET /v1/test-results/{signature}` don't use up the budget of the other rows.
 * Personal access tokens and OAuth tokens count per person: all of one person's tokens share the per-key limit.
 * The organization limit is shared by all API keys and tokens of the organization.
 * Each limit counts requests in fixed one-minute windows.
