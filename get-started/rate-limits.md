@@ -14,7 +14,7 @@ The REST API limits how many requests each API key and each organization can sen
 | `GET /v1/instances/{instanceId}` | 1,000 per minute | 2,000 per minute |
 | `GET` requests for a project: `/v1/projects/...`, `/v1/tests/{projectId}`, `/v1/errors/{projectId}`, `/v1/spec-files/{projectId}` | 600 per minute | 1,200 per minute |
 | Other `GET` requests | 600 per minute | 1,200 per minute |
-| `POST`, `PUT` and `DELETE` requests | 300 per minute | 600 per minute |
+| `POST`, `PUT`, `PATCH` and `DELETE` requests | 300 per minute | 600 per minute |
 
 * Each request counts against one row only. Requests to `GET /v1/test-results/{signature}` don't use up the budget of the other rows.
 * Personal access tokens and OAuth tokens count per person: all of one person's tokens share the per-key limit.
