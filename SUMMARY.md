@@ -6,6 +6,7 @@
 
 * [Authentication](get-started/authentication.md)
 * [Pagination](get-started/pagination.md)
+* [Rate Limits](get-started/rate-limits.md)
 * [Errors](get-started/errors.md)
 * [Failed Tests and Test History](get-started/test-results.md)
 
