@@ -4,29 +4,30 @@ icon: forward-step
 
 # Pagination
 
-List endpoints return collections in pages. Currents uses **cursor-based** and **offset-based** pagination for various API endpoints. This page describes both patterns.
+List endpoints return their items in pages. Lists of projects, runs, pull requests, spec file executions and test executions page by cursor. The lists of tests, spec files and errors of a project, which aggregate results across runs, page by page number.
 
 ## Cursor-based pagination
 
-Use cursor pagination for list methods such as listing projects or runs for a project.
+The cursor lists include:
+
+* `GET /v1/projects` and `GET /v1/projects/{projectId}/runs`
+* `GET /v1/projects/{projectId}/pull-requests`
+* `GET /v1/runs/{runId}/instances` and `GET /v1/runs/{runId}/test-executions`
+* `GET /v1/projects/{projectId}/tests/{signature}/executions` and `GET /v1/projects/{projectId}/spec-files/{signature}/executions`
 
 ### Parameters
 
-Optional query parameters:
+| Parameter        | Description                                                                                                 |
+| ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| `limit`          | Maximum number of items in the page. The API reference lists the default and the maximum of each endpoint.  |
+| `starting_after` | The `cursor` of the last item of a page. Returns the next page.                                             |
+| `ending_before`  | The `cursor` of the first item of a page. Returns the previous page.                                        |
 
-| Parameter        | Description                                                                                                           |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `limit`          | Maximum number of items in this page. **1–50**, default **10**.                                                       |
-| `starting_after` | Cursor from a previous item. Returns the next page of items **older** than that item (see [Sort order](#sort-order)). |
-| `ending_before`  | Cursor from a previous item. Returns the next page of items **newer** than that item (see [Sort order](#sort-order)). |
-
-{% hint style="warning" %}
-Only one of `starting_after` or `ending_before` may be sent in a single request. They are mutually exclusive.
-{% endhint %}
+Send either `starting_after` or `ending_before`, not both. Send the same filters on every page.
 
 ### Response shape
 
-Every list response includes `has_more`. Each item in `data` includes a `cursor` string you pass back as `starting_after` or `ending_before` on the next request.
+The response has `has_more`, and each item in `data` has a `cursor`.
 
 Example: `GET https://api.currents.dev/v1/projects/bAYZ41/runs`
 
@@ -47,88 +48,62 @@ Example: `GET https://api.currents.dev/v1/projects/bAYZ41/runs`
 }
 ```
 
-When `has_more` is `true`, request the next page using the appropriate cursor parameter (see below).
-
 ### Sort order
 
-Picture the full timeline as **newest at the top**, **oldest at the bottom** (like a “latest first” feed):
+Most cursor lists are newest first: the next page (`starting_after`) has older items, and the previous page (`ending_before`) has newer items. `GET /v1/runs/{runId}/instances` lists the spec file executions of a run in the order they were created. The API reference states the order of each endpoint.
 
-```text
-… newest …
-cursor_D
-cursor_C
-cursor_B   ← reference cursor
-cursor_A
-… oldest …
-```
+### Read all the pages
 
-| Request                                      | What you get                                                                                                                                                 |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Neither `starting_after` nor `ending_before` | First page, in that endpoint’s default order.                                                                                                                |
-| `starting_after=cursor_B`                    | Items **older than B** (e.g. `cursor_A`, …)—continuing **down** toward the oldest. The API describes this page as **chronological** order.                   |
-| `ending_before=cursor_B`                     | Items **newer than B** (e.g. `cursor_C`, `cursor_D`, …)—continuing **up** toward the newest. The API describes this page as **reverse chronological** order. |
-
-### Example: next page (older items)
-
-After the first request, take the **last** item’s `cursor` in `data` and call again with `starting_after`:
+1. Send the first request without a cursor.
+2. If `has_more` is `false`, stop.
+3. Send the next request with `starting_after` set to the `cursor` of the last item in `data`.
 
 ```http
 GET /v1/projects/bAYZ41/runs?limit=20&starting_after=62baacbf9f4689a83d2b24cb
 ```
 
-Stop when `has_more` is `false` or `data` is empty.
+### Pages cut short by a read limit
 
-### Example: page toward newer items
-
-Use `ending_before` with a cursor from an item **newer** than the slice you want to extend (often the **first** item of the current page when walking back toward the present):
-
-```http
-GET /v1/projects/bAYZ41/runs?limit=20&ending_before=62c538efcbd7fab8a5edb371
-```
+`GET /v1/runs/{runId}/instances` and `GET /v1/projects/{projectId}/spec-files/{signature}/executions` read at most 1,000 executions per request, before they apply the filters. When a request stops at that limit, the page can have fewer items than `limit`, or none, `has_more` is `true`, and the response has `next_cursor`. Continue with `starting_after=<next_cursor>`, or `ending_before=<next_cursor>` when you page back, instead of the cursor of the last item.
 
 ## Offset-based pagination
 
-Some list operations (for example, aggregated lists such as **spec files** for a project) do not map to a stable row cursor. Those endpoints document offset pagination explicitly.
+These lists aggregate results across runs and page by page number:
+
+* `GET /v1/projects/{projectId}/tests`
+* `GET /v1/projects/{projectId}/spec-files`
+* `GET /v1/projects/{projectId}/errors`
+
+### Parameters
+
+| Parameter | Description                                                         |
+| --------- | ------------------------------------------------------------------- |
+| `limit`   | Page size. The API reference lists the default and the maximum.     |
+| `page`    | Zero-based page index. Default: `0`.                                |
 
 ### Response shape
 
-```typescript
+```json
 {
   "status": "OK",
   "data": {
-    // ... resource-specific fields
-    "nextPage": number | false,
-    "total": number
+    "list": [],
+    "total": 77,
+    "nextPage": 1
   }
 }
 ```
 
 | Field      | Meaning                                                              |
 | ---------- | -------------------------------------------------------------------- |
-| `total`    | Total number of items matching the query (across all pages).         |
+| `list`     | The items of this page.                                              |
+| `total`    | Number of items that match the request, across all pages.            |
 | `nextPage` | Page index to request next, or `false` when there are no more pages. |
-
-### Parameters
-
-| Parameter | Description            |
-| --------- | ---------------------- |
-| `limit`   | Page size. **1–50**.   |
-| `page`    | Zero-based page index. |
-
-The slice applied server-side is:
-
-```text
-items.slice(page * limit, page * limit + limit)
-```
-
-(Equivalent to `items.splice(page * limit, limit)` for a copy of the list.)
 
 ### Example
 
-First page:
-
 ```http
-GET /v1/projects/{projectId}/specs?limit=25&page=0
+GET /v1/projects/{projectId}/spec-files?limit=25&page=0&date_start=2026-11-01&date_end=2026-11-23
 ```
 
-If `data.nextPage` is `1`, fetch the next page with `page=1`, same `limit`, until `nextPage` is `false`.
+If `data.nextPage` is `1`, send the same request with `page=1`, until `nextPage` is `false`.
